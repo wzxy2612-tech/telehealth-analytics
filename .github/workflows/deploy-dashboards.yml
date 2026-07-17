@@ -74,15 +74,16 @@ jobs:
         working-directory: dashboards
         run: npm ci
 
+      - name: Inject Base Path into Config
+        working-directory: dashboards
+        run: |
+          touch evidence.config.yaml
+          yq -i '.deployment.basePath = "/${{ github.event.repository.name }}"' evidence.config.yaml
+          cat evidence.config.yaml
+
       - name: Build sources + site
         working-directory: dashboards
         env:
-          # BASE_PATH prefixes every asset URL with /<repo> so they resolve on a
-          # project site (https://<user>.github.io/<repo>/). Evidence otherwise
-          # builds to build/ (flat), so EVIDENCE_BUILD_DIR nests the output and
-          # the upload path below matches exactly. Both are required; there is
-          # no --base CLI flag.
-          BASE_PATH: "/${{ github.event.repository.name }}"
           EVIDENCE_BUILD_DIR: "./build/${{ github.event.repository.name }}"
         run: |
           npm run sources
