@@ -57,7 +57,14 @@ jobs:
       - name: dbt build
         run: dbt build
 
-      # ---- 2. Build the Evidence site (node) ------------------------------
+      # ---- 2. Debug: find the duckdb --------------------------------------
+      - name: Debug — where is the duckdb
+        run: |
+          echo "== repo root ==" && ls -la *.duckdb 2>/dev/null || echo "no duckdb at root"
+          echo "== sources dir ==" && ls -la dashboards/sources/telehealth/*.duckdb 2>/dev/null || echo "none in sources"
+          echo "== profiles db path ==" && grep -A6 "outputs:" profiles.yml
+
+      # ---- 3. Build the Evidence site (node) ------------------------------
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
