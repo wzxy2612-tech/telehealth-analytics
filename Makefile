@@ -31,7 +31,7 @@ setup deps:
 	dbt deps
 
 load:
-	python load.py
+	python load.py --db dashboards/sources/telehealth/telehealth.duckdb
 
 build:
 	dbt build
@@ -63,7 +63,7 @@ all: setup load build
 # e.g. `make day D=2025-01-02`
 day:
 	python generate_data.py day --date $(D) --output-dir data/generated
-	python load.py --data-dir data/generated
+	python load.py --data-dir data/generated --db dashboards/sources/telehealth/telehealth.duckdb
 	dbt build
 
 # ---- Big-data path (gitignored; larger synthetic set for local dev) ----
@@ -75,7 +75,7 @@ generate-big:
 	    --output-dir data/generated
 
 load-big:
-	python load.py --data-dir data/generated
+	python load.py --data-dir data/generated --db dashboards/sources/telehealth/telehealth.duckdb
 
 clean-big:
 	rm -rf data/generated
@@ -86,5 +86,5 @@ regen-fixture:
 	    --seed 42 --output-dir data/raw
 
 clean:
-	rm -f telehealth.duckdb telehealth_ci.duckdb
+	rm -f dashboards/sources/telehealth/telehealth.duckdb dashboards/sources/telehealth/telehealth_ci.duckdb
 	rm -rf target dbt_packages logs
