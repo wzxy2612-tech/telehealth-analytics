@@ -72,12 +72,12 @@ jobs:
         working-directory: dashboards
         run: npm run sources
 
-      - name: Build static site
+      - name: Build Evidence
         working-directory: dashboards
-        # base-path makes assets resolve under the project-site subpath
-        # (https://<user>.github.io/<repo>/). Adjust if your Evidence version
-        # uses a different flag/env (see Evidence deployment docs).
-        run: npx evidence build --base "/${GITHUB_REPOSITORY#*/}"
+        env:
+          BASE_PATH: "/${{ github.event.repository.name }}"
+          VITE_BASE_PATH: "/${{ github.event.repository.name }}"
+        run: npm run build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
