@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: stg_patients
+    description: >
+      Cleaned patient records. PHI boundary: direct identifiers (email, name,
+      DOB) exist here only and must not be selected by any mart.
+    columns:
+      - name: patient_id
+        data_tests: [unique, not_null]
+      - name: state
+        description: "Two-letter US state code."
+      - name: age
+        description: "Derived from DOB; used to build age bands in dim_patients (DOB itself is not propagated)."
+
+  - name: stg_appointments
+    description: "One row per consultation, with lifecycle flags."
+    columns:
+      - name: appointment_id
+        data_tests: [unique, not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              values: ["completed", "no_show", "cancelled", "scheduled"]
+      - name: appointment_type
+        data_tests:
+          - accepted_values:
+              values: ["video", "phone", "message"]
+      - name: patient_id
+        data_tests:
+          - relationships:
+              to: ref('stg_patients')
+              field: patient_id
+
+  - name: stg_subscriptions
+    description: "Current-state snapshot per subscription."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+      - name: status
+        data_tests:
+          - accepted_values:
+              values: ["active", "cancelled", "paused"]
+      - name: mrr_amount
+        data_tests: [not_null]
+
+  - name: stg_subscription_events
+    columns:
+      - name: event_id
+        data_tests: [unique, not_null]
+      - name: event_type
+        data_tests:
+          - accepted_values:
+              values: ["created", "activated", "plan_changed", "cancelled", "reactivated"]
+
+  - name: stg_marketing_touchpoints
+    columns:
+      - name: touchpoint_id
+        data_tests: [unique, not_null]
+
+  - name: stg_providers
+    columns:
+      - name: provider_id
+        data_tests: [unique, not_null]

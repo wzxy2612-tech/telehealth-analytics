@@ -1,0 +1,4 @@
+name: telehealth
+type: duckdb
+options:
+  filename: telehealth.duckdb

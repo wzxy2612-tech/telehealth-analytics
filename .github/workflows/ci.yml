@@ -1,0 +1,63 @@
+name: dbt CI
+
+# Validate that models compile, build, and pass tests on every PR that touches
+# the pipeline. This is the guardrail that keeps a small team from shipping a
+# broken transform.
+on:
+  pull_request:
+    paths:
+      - "models/**"
+      - "macros/**"
+      - "seeds/**"
+      - "dbt_project.yml"
+      - "profiles.yml"
+      - "packages.yml"
+      - "requirements.txt"
+      - "load.py"
+      - "generate_data.py"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DBT_PROFILES_DIR: .
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      - name: Land raw data into DuckDB
+        # Uses the sample CSVs committed under data/raw/ so CI is hermetic and
+        # needs no external warehouse or secrets.
+        run: python load.py --db telehealth_ci.duckdb
+
+      - name: Build + test (fail fast)
+        run: dbt build --target ci --fail-fast
+
+      - name: Generate docs
+        if: always()
+        run: dbt docs generate --target ci
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-target
+          path: target/
+          retention-days: 7

@@ -1,0 +1,87 @@
+name: Daily pipeline
+
+# Runs the pipeline on a schedule: land new data, build (incrementally),
+# test, and check source freshness. Demonstrates the schedule + monitoring +
+# error-handling story the role asks for.
+on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      run_date:
+        description: "Day to generate (YYYY-MM-DD). Defaults to today."
+        required: false
+
+env:
+  DBT_PROFILES_DIR: .
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      # Persist the DuckDB warehouse between scheduled runs so the incremental
+      # model has prior state to build on. Best-effort (caches are evicted
+      # after ~7 days); in production the warehouse is Redshift and this step
+      # goes away entirely.
+      - name: Restore warehouse
+        uses: actions/cache/restore@v4
+        with:
+          path: telehealth.duckdb
+          key: warehouse-${{ github.run_id }}
+          restore-keys: warehouse-
+
+      - name: Generate the day's data
+        run: |
+          RUN_DATE="${{ github.event.inputs.run_date }}"
+          if [ -z "$RUN_DATE" ]; then RUN_DATE="$(date -u +%F)"; fi
+          echo "Generating activity for $RUN_DATE"
+          python generate_data.py day --date "$RUN_DATE"
+
+      - name: Land raw data
+        run: python load.py
+
+      - name: Check source freshness
+        # Non-blocking signal: warns if a source has stopped receiving rows.
+        run: dbt source freshness || echo "::warning::source freshness check reported staleness"
+
+      - name: Build + test
+        run: dbt build
+
+      - name: Save warehouse
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: telehealth.duckdb
+          key: warehouse-${{ github.run_id }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-target-${{ github.run_id }}
+          path: target/
+          retention-days: 7
+
+      # Error handling: ping Slack on failure. No-op unless SLACK_WEBHOOK_URL
+      # is set in repo secrets, so the workflow stays green for forks.
+      - name: Notify on failure
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -sf -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\":red_circle: Daily telehealth pipeline failed on ${{ github.ref_name }} (run ${{ github.run_id }})\"}" \
+            "$SLACK_WEBHOOK_URL"

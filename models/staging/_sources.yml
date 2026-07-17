@@ -1,0 +1,72 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Raw source tables landed by the EL layer (Airbyte / dlt) as-is. In
+      production these live in Redshift; locally they are DuckDB tables built
+      by load.py. All columns land as text; casting happens in staging.
+    schema: raw
+    # `dbt source freshness` measures staleness against the max event timestamp,
+    # so a stalled pipeline (no new rows) surfaces as a warning/error. Wire this
+    # into the scheduled job to get monitoring for free.
+    freshness:
+      warn_after: {count: 36, period: hour}
+      error_after: {count: 72, period: hour}
+
+    tables:
+      - name: patients
+        description: "Application DB (MySQL/RDS). One row per registered patient. Contains PII/PHI."
+        loaded_at_field: "cast(updated_at as timestamp)"
+        columns:
+          - name: patient_id
+            description: "Primary key."
+            data_tests: [unique, not_null]
+          - name: anonymous_id
+            description: "Pre-signup tracking id; join key to marketing_touchpoints."
+
+      - name: providers
+        description: "Application DB. One row per clinician."
+        freshness: null  # slowly-changing reference data; freshness not meaningful
+        columns:
+          - name: provider_id
+            data_tests: [unique, not_null]
+
+      - name: appointments
+        description: "Application DB. One row per booked consultation."
+        loaded_at_field: "cast(updated_at as timestamp)"
+        columns:
+          - name: appointment_id
+            data_tests: [unique, not_null]
+          - name: patient_id
+            data_tests:
+              - not_null
+              - relationships:
+                  to: source('raw', 'patients')
+                  field: patient_id
+
+      - name: subscriptions
+        description: "Chargebee. Current-state snapshot of each subscription."
+        loaded_at_field: "cast(updated_at as timestamp)"
+        columns:
+          - name: subscription_id
+            data_tests: [unique, not_null]
+          - name: patient_id
+            data_tests:
+              - relationships:
+                  to: source('raw', 'patients')
+                  field: patient_id
+
+      - name: subscription_events
+        description: "Chargebee. Immutable lifecycle log (created / plan_changed / cancelled)."
+        loaded_at_field: "cast(event_at as timestamp)"
+        columns:
+          - name: event_id
+            data_tests: [unique, not_null]
+
+      - name: marketing_touchpoints
+        description: "Customer.io + ad accounts. One row per marketing interaction."
+        loaded_at_field: "cast(event_at as timestamp)"
+        columns:
+          - name: touchpoint_id
+            data_tests: [unique, not_null]

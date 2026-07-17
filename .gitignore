@@ -1,0 +1,26 @@
+# dbt
+target/
+dbt_packages/
+logs/
+.user.yml
+
+# DuckDB warehouse files are rebuildable from data/raw -> not versioned
+*.duckdb
+*.duckdb.wal
+
+# generated data (large synthetic sets, not committed)
+data/generated/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# environment / secrets — never commit real credentials
+.env
+.env.*
+*.env
+
+# os
+.DS_Store

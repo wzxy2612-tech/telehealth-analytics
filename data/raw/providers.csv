@@ -1,0 +1,11 @@
+provider_id,provider_name,specialty,created_at
+prov_000001,Dr. Anderson,Primary Care,2024-01-01 10:01:36
+prov_000002,Dr. Smith,Primary Care,2024-01-01 13:00:24
+prov_000003,Dr. Garcia,Primary Care,2024-01-01 12:03:48
+prov_000004,Dr. Lee,Behavioral Health,2024-01-01 09:51:57
+prov_000005,Dr. Anderson,Behavioral Health,2024-01-01 17:55:41
+prov_000006,Dr. Johnson,Behavioral Health,2024-01-01 18:44:58
+prov_000007,Dr. Brown,Dermatology,2024-01-01 08:34:42
+prov_000008,Dr. Smith,Dermatology,2024-01-01 09:42:20
+prov_000009,Dr. Garcia,Endocrinology,2024-01-01 12:14:07
+prov_000010,Dr. Martinez,Nutrition,2024-01-01 18:57:33

@@ -1,0 +1,33 @@
+# Local-first profile. `dbt` looks for profiles.yml in ~/.dbt by default, but
+# also honours DBT_PROFILES_DIR. The Makefile / CI set DBT_PROFILES_DIR=. so
+# this project-local copy is used and nothing touches your global config.
+telehealth:
+  target: dev
+  outputs:
+    # ---- Local development: DuckDB (free, fast, columnar) -------------------
+    dev:
+      type: duckdb
+      path: "telehealth.duckdb"
+      threads: 4
+
+    # ---- CI: identical to dev, isolated file --------------------------------
+    ci:
+      type: duckdb
+      path: "telehealth_ci.duckdb"
+      threads: 4
+
+    # ---- Production: Redshift Serverless ------------------------------------
+    # The models are written in portable SQL; moving to Redshift is a profile
+    # swap plus physical tuning (dist/sort keys) on the largest marts. Install
+    # dbt-redshift and populate these from environment variables / secrets.
+    #
+    # prod:
+    #   type: redshift
+    #   host: "{{ env_var('REDSHIFT_HOST') }}"
+    #   port: 5439
+    #   user: "{{ env_var('REDSHIFT_USER') }}"
+    #   password: "{{ env_var('REDSHIFT_PASSWORD') }}"
+    #   dbname: "{{ env_var('REDSHIFT_DB') }}"
+    #   schema: analytics
+    #   threads: 8
+    #   sslmode: require

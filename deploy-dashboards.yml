@@ -1,0 +1,112 @@
+name: Deploy dashboards
+
+# Builds the pipeline end-to-end from the COMMITTED FIXTURE (deterministic, no
+# cache, no secrets) and publishes the Evidence site to GitHub Pages:
+#   load fixture -> dbt build -> stage warehouse -> evidence build -> Pages
+#
+# One-time setup: repo Settings -> Pages -> Source = "GitHub Actions".
+# (The github-pages environment must exist before the first run.)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "models/**"
+      - "macros/**"
+      - "dashboards/**"
+      - "data/raw/**"
+      - "load.py"
+      - "dbt_project.yml"
+      - "profiles.yml"
+      - "packages.yml"
+      - "requirements.txt"
+      - ".github/workflows/deploy-dashboards.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel an in-flight deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  DBT_PROFILES_DIR: .
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- 1. Build the warehouse from the committed fixture ---------------
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install python deps
+        run: pip install -r requirements.txt
+
+      - name: dbt deps
+        run: dbt deps
+
+      - name: Load fixture into DuckDB
+        # Reads data/raw (committed) -> telehealth.duckdb. Deterministic; the
+        # deployed dashboard shows the same data every run.
+        run: python load.py
+
+      - name: dbt build
+        run: dbt build
+
+      # ---- 2. Stage the warehouse where Evidence expects it ---------------
+      # Evidence resolves the DuckDB file relative to connection.yaml, so the
+      # file must live inside sources/telehealth/ (matches local dev).
+      - name: Stage warehouse for Evidence
+        run: cp telehealth.duckdb dashboards/sources/telehealth/telehealth.duckdb
+
+      # ---- 3. Build the Evidence static site ------------------------------
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboards/package-lock.json
+
+      - name: Install Evidence
+        working-directory: dashboards
+        # npm ci needs dashboards/package-lock.json committed (it is, from the
+        # official template scaffold). Swap to `npm install` if you don't commit it.
+        run: npm ci
+
+      - name: Build sources + site
+        working-directory: dashboards
+        env:
+          # Project sites are served at https://<user>.github.io/<repo>/, so
+          # assets must be prefixed with /<repo>. Evidence reads BASE_PATH for
+          # the URL prefix. It otherwise builds to `build/` (NOT build/<repo>),
+          # so we also set EVIDENCE_BUILD_DIR to nest the output; the upload
+          # path below then matches exactly. (Verified against Evidence's
+          # GitHub Pages + Base Paths docs — this is the version-sensitive bit.)
+          BASE_PATH: "/${{ github.event.repository.name }}"
+          EVIDENCE_BUILD_DIR: "./build/${{ github.event.repository.name }}"
+        run: |
+          npm run sources
+          npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "dashboards/build/${{ github.event.repository.name }}"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

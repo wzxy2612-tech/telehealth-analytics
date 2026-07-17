@@ -1,0 +1,96 @@
+name: Deploy dashboards
+
+# Builds the whole pipeline end-to-end and publishes the Evidence site to
+# GitHub Pages, giving the project a live, clickable front door:
+#   generate synthetic data -> load -> dbt build -> evidence build -> Pages
+#
+# Setup (one-time): repo Settings -> Pages -> Source = "GitHub Actions".
+on:
+  push:
+    branches: [main]
+    paths:
+      - "models/**"
+      - "macros/**"
+      - "dashboards/**"
+      - "generate_data.py"
+      - "load.py"
+      - "dbt_project.yml"
+      - ".github/workflows/deploy-dashboards.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  DBT_PROFILES_DIR: .
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- 1. Build the warehouse (python + dbt) --------------------------
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install python deps
+        run: pip install -r requirements.txt
+
+      - name: dbt deps
+        run: dbt deps
+
+      - name: Generate synthetic data
+        run: python generate_data.py backfill --start 2024-10-01 --end 2024-12-31
+
+      - name: Load into DuckDB
+        run: python load.py
+
+      - name: dbt build
+        run: dbt build
+
+      # ---- 2. Build the Evidence site (node) ------------------------------
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboards/package-lock.json
+
+      - name: Install Evidence
+        working-directory: dashboards
+        run: npm install
+
+      - name: Build sources from the warehouse
+        working-directory: dashboards
+        run: npm run sources
+
+      - name: Build static site
+        working-directory: dashboards
+        # base-path makes assets resolve under the project-site subpath
+        # (https://<user>.github.io/<repo>/). Adjust if your Evidence version
+        # uses a different flag/env (see Evidence deployment docs).
+        run: npx evidence build --base-path "/${GITHUB_REPOSITORY#*/}"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dashboards/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

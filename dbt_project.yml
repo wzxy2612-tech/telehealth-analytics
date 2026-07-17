@@ -1,0 +1,37 @@
+name: "telehealth"
+version: "1.0.0"
+config-version: 2
+
+# This profile name must match a key in profiles.yml
+profile: "telehealth"
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # Lower bound of the daily MRR date spine (fct_mrr_daily). Set to on/before
+  # your earliest subscription start. Upper bound is always current_date.
+  mrr_start_date: "2024-10-01"
+
+models:
+  telehealth:
+    # Staging: 1:1 with sources, light cleaning. Cheap to rebuild -> views.
+    staging:
+      +materialized: view
+      +schema: staging
+    # Intermediate: reusable business logic, not exposed to BI. Ephemeral keeps
+    # the warehouse tidy (compiled inline, no objects created).
+    intermediate:
+      +materialized: ephemeral
+      +schema: intermediate
+    # Marts: what BI (Looker) reads. Persisted as tables for query performance.
+    marts:
+      +materialized: table
+      +schema: marts
+      core:
+        +schema: marts
+      marketing:
+        +schema: marts

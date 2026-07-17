@@ -1,0 +1,70 @@
+version: 2
+
+models:
+  # ---- Core (Medical Ops + Business Ops) ----------------------------------
+  - name: dim_patients
+    description: >
+      Patient dimension. PHI-minimised: contains no email, name, or DOB (age is
+      banded). Safe to expose broadly in Looker.
+    columns:
+      - name: patient_id
+        data_tests: [unique, not_null]
+      - name: age_band
+        data_tests:
+          - accepted_values:
+              values: ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
+
+  - name: dim_providers
+    columns:
+      - name: provider_id
+        data_tests: [unique, not_null]
+
+  - name: fct_appointments
+    description: "Medical Ops. One row per appointment. Drives no-show rate, volume, provider load."
+    columns:
+      - name: appointment_id
+        data_tests: [unique, not_null]
+      - name: patient_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_patients')
+              field: patient_id
+      - name: status
+        data_tests:
+          - accepted_values:
+              values: ["completed", "no_show", "cancelled", "scheduled"]
+
+  - name: fct_mrr_daily
+    description: "Business Ops. One row per calendar day: active subs, MRR, ARR, ARPU."
+    columns:
+      - name: calendar_date
+        data_tests: [unique, not_null]
+      - name: mrr
+        data_tests: [not_null]
+
+  - name: fct_subscriptions
+    description: "Business Ops. One row per subscription; plan/status/tenure for revenue slicing."
+    columns:
+      - name: subscription_id
+        data_tests: [unique, not_null]
+      - name: patient_id
+        data_tests:
+          - relationships:
+              to: ref('dim_patients')
+              field: patient_id
+      - name: plan_id
+        data_tests:
+          - accepted_values:
+              values: ["basic", "plus", "premium"]
+      - name: status
+        data_tests:
+          - accepted_values:
+              values: ["active", "cancelled", "paused"]
+
+  # ---- Marketing -----------------------------------------------------------
+  - name: mart_marketing_attribution
+    description: "Marketing. First-touch acquisition performance and CAC by channel/campaign."
+    columns:
+      - name: signups
+        data_tests: [not_null]

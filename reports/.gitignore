@@ -1,0 +1,8 @@
+node_modules/
+.evidence/
+build/
+.svelte-kit/
+# materialized query outputs + the warehouse copy are rebuildable
+static/data/
+sources/**/*.duckdb
+sources/**/*.parquet

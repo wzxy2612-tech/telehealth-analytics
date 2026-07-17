@@ -1,0 +1,7 @@
+# DuckDB source. No secrets, so no connection.options.yaml is needed.
+# `filename` is resolved relative to the sources directory; the warehouse file
+# is copied into this folder by `make dashboard` (see SETUP.md).
+name: telehealth
+type: duckdb
+options:
+  filename: telehealth.duckdb
