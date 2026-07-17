@@ -77,7 +77,7 @@ jobs:
         # base-path makes assets resolve under the project-site subpath
         # (https://<user>.github.io/<repo>/). Adjust if your Evidence version
         # uses a different flag/env (see Evidence deployment docs).
-        run: npx evidence build --base-path "/${GITHUB_REPOSITORY#*/}"
+        run: npx evidence build --base "/${GITHUB_REPOSITORY#*/}"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
