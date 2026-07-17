@@ -7,13 +7,13 @@ telehealth:
     # ---- Local development: DuckDB (free, fast, columnar) -------------------
     dev:
       type: duckdb
-      path: "telehealth.duckdb"
+      path: "dashboards/sources/telehealth/telehealth.duckdb"
       threads: 4
 
     # ---- CI: identical to dev, isolated file --------------------------------
     ci:
       type: duckdb
-      path: "telehealth_ci.duckdb"
+      path: "dashboards/sources/telehealth/telehealth_ci.duckdb"
       threads: 4
 
     # ---- Production: Redshift Serverless ------------------------------------

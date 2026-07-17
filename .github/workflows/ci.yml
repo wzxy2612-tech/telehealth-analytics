@@ -45,7 +45,7 @@ jobs:
       - name: Land raw data into DuckDB
         # Uses the sample CSVs committed under data/raw/ so CI is hermetic and
         # needs no external warehouse or secrets.
-        run: python load.py --db telehealth_ci.duckdb
+        run: python load.py --db dashboards/sources/telehealth/telehealth_ci.duckdb
 
       - name: Build + test (fail fast)
         run: dbt build --target ci --fail-fast

@@ -54,18 +54,10 @@ jobs:
         run: dbt deps
 
       - name: Load fixture into DuckDB
-        # Reads data/raw (committed) -> telehealth.duckdb. Deterministic; the
-        # deployed dashboard shows the same data every run.
-        run: python load.py
+        run: python load.py --db dashboards/sources/telehealth/telehealth.duckdb
 
       - name: dbt build
         run: dbt build
-
-      # ---- 2. Stage the warehouse where Evidence expects it ---------------
-      # Evidence resolves the DuckDB file relative to connection.yaml, so the
-      # file must live inside sources/telehealth/ (matches local dev).
-      - name: Stage warehouse for Evidence
-        run: cp telehealth.duckdb dashboards/sources/telehealth/telehealth.duckdb
 
       # ---- 3. Build the Evidence static site ------------------------------
       - uses: actions/setup-node@v4
