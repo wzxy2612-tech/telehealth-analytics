@@ -1,10 +1,10 @@
 name: Deploy dashboards
 
-# Builds the whole pipeline end-to-end and publishes the Evidence site to
-# GitHub Pages, giving the project a live, clickable front door:
-#   generate synthetic data -> load -> dbt build -> evidence build -> Pages
+# Builds the pipeline from the committed fixture and publishes the Evidence
+# site to GitHub Pages:
+#   load fixture -> dbt build -> evidence build -> Pages
 #
-# Setup (one-time): repo Settings -> Pages -> Source = "GitHub Actions".
+# One-time setup: repo Settings -> Pages -> Source = "GitHub Actions".
 on:
   push:
     branches: [main]
@@ -12,9 +12,12 @@ on:
       - "models/**"
       - "macros/**"
       - "dashboards/**"
-      - "generate_data.py"
+      - "data/raw/**"
       - "load.py"
       - "dbt_project.yml"
+      - "profiles.yml"
+      - "packages.yml"
+      - "requirements.txt"
       - ".github/workflows/deploy-dashboards.yml"
   workflow_dispatch:
 
@@ -23,9 +26,10 @@ permissions:
   pages: write
   id-token: write
 
+# Never cancel an in-flight deploy.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   DBT_PROFILES_DIR: .
@@ -36,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ---- 1. Build the warehouse (python + dbt) --------------------------
+      # ---- 1. Build the warehouse from the committed fixture --------------
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -48,16 +52,18 @@ jobs:
       - name: dbt deps
         run: dbt deps
 
-      - name: Generate synthetic data
-        run: python generate_data.py backfill --start 2024-10-01 --end 2024-12-31
-
-      - name: Load into DuckDB
-        run: python load.py --db dashboards/sources/telehealth/telehealth.duckdb
+      # load.py default --db now points at the subdir file (matches profiles.yml
+      # dev target), so no --db needed. Reads data/raw fixture -> deterministic.
+      - name: Load fixture into DuckDB
+        run: python load.py
 
       - name: dbt build
         run: dbt build
 
-      # ---- 3. Build the Evidence site (node) ------------------------------
+      # ---- 2. Build the Evidence static site -----------------------------
+      # dbt already built the warehouse in place at
+      # dashboards/sources/telehealth/telehealth.duckdb (where connection.yaml
+      # expects it), so no copy step is needed.
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -66,23 +72,26 @@ jobs:
 
       - name: Install Evidence
         working-directory: dashboards
-        run: npm install
+        run: npm ci
 
-      - name: Build sources from the warehouse
-        working-directory: dashboards
-        run: npm run sources
-
-      - name: Build Evidence
+      - name: Build sources + site
         working-directory: dashboards
         env:
+          # BASE_PATH prefixes every asset URL with /<repo> so they resolve on a
+          # project site (https://<user>.github.io/<repo>/). Evidence otherwise
+          # builds to build/ (flat), so EVIDENCE_BUILD_DIR nests the output and
+          # the upload path below matches exactly. Both are required; there is
+          # no --base CLI flag.
           BASE_PATH: "/${{ github.event.repository.name }}"
-          VITE_BASE_PATH: "/${{ github.event.repository.name }}"
-        run: npm run build
+          EVIDENCE_BUILD_DIR: "./build/${{ github.event.repository.name }}"
+        run: |
+          npm run sources
+          npm run build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dashboards/build
+          path: "dashboards/build/${{ github.event.repository.name }}"
 
   deploy:
     needs: build
