@@ -1,0 +1,39 @@
+version: 2
+
+# Additive schema file for the SCD2 subscription history model. Kept separate
+# so it doesn't collide with your existing _marts__models.yml.
+models:
+  - name: dim_subscription_history
+    description: >
+      SCD Type 2 history of subscription plans, reconstructed from
+      subscription_events. One row per plan period with [valid_from, valid_to)
+      and is_current. Answers point-in-time questions like "what plan was this
+      subscription on at date X" and "revenue mix by plan over time".
+    columns:
+      - name: subscription_id
+        description: "FK to the subscription. Not unique here (one row per plan period)."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_subscriptions')
+              field: subscription_id
+      - name: patient_id
+        data_tests:
+          - relationships:
+              to: ref('dim_patients')
+              field: patient_id
+      - name: plan_id
+        data_tests:
+          - accepted_values:
+              values: ["basic", "plus", "premium"]
+      - name: valid_from
+        data_tests: [not_null]
+      - name: is_current
+        data_tests: [not_null]
+
+    # composite grain: each plan period for a subscription starts exactly once
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - subscription_id
+            - valid_from

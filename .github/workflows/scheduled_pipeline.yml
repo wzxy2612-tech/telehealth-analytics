@@ -1,8 +1,12 @@
 name: Daily pipeline
 
-# Runs the pipeline on a schedule: land new data, build (incrementally),
-# test, and check source freshness. Demonstrates the schedule + monitoring +
-# error-handling story the role asks for.
+# Optional demo of the schedule + monitoring + error-handling story: append a
+# day of activity, reload, check freshness, rebuild incrementally.
+#
+# This is the ONE workflow that accumulates state across runs (that's the point
+# of an incremental demo), so it caches both the generated CSVs and the DuckDB
+# warehouse. The PR CI and the Pages deploy deliberately don't — they build
+# from the committed fixture for determinism.
 on:
   schedule:
     - cron: "0 7 * * *" # 07:00 UTC daily
@@ -14,6 +18,9 @@ on:
 
 env:
   DBT_PROFILES_DIR: .
+  # Single source of truth for the mutable data path + warehouse location.
+  GEN_DIR: data/generated
+  WAREHOUSE: dashboards/sources/telehealth/telehealth.duckdb
 
 jobs:
   run:
@@ -32,26 +39,40 @@ jobs:
       - name: Install dbt packages
         run: dbt deps
 
-      # Persist the DuckDB warehouse between scheduled runs so the incremental
-      # model has prior state to build on. Best-effort (caches are evicted
-      # after ~7 days); in production the warehouse is Redshift and this step
-      # goes away entirely.
-      - name: Restore warehouse
+      # Carry prior state between runs: the generated CSVs (data/generated is
+      # gitignored, so it starts empty on a fresh checkout) and the warehouse
+      # (so the incremental model has a previous build to compare against).
+      # Best-effort — GitHub evicts caches after ~7 days; in production the
+      # warehouse is Redshift and this whole step disappears.
+      - name: Restore state
         uses: actions/cache/restore@v4
         with:
-          path: telehealth.duckdb
-          key: warehouse-${{ github.run_id }}
-          restore-keys: warehouse-
+          path: |
+            data/generated
+            dashboards/sources/telehealth/telehealth.duckdb
+          key: pipeline-state-${{ github.run_id }}
+          restore-keys: pipeline-state-
 
       - name: Generate the day's data
         run: |
           RUN_DATE="${{ github.event.inputs.run_date }}"
           if [ -z "$RUN_DATE" ]; then RUN_DATE="$(date -u +%F)"; fi
-          echo "Generating activity for $RUN_DATE"
-          python generate_data.py day --date "$RUN_DATE"
 
+          # Self-healing: on a cache miss there's no history to append to, so
+          # seed a backfill first. Keeps the incremental demo meaningful.
+          if [ ! -f "$GEN_DIR/patients.csv" ]; then
+            echo "::notice::No prior state (cache miss) — seeding backfill into $GEN_DIR"
+            python generate_data.py backfill \
+              --start 2024-10-01 --end 2024-12-31 --output-dir "$GEN_DIR"
+          fi
+
+          echo "Appending activity for $RUN_DATE"
+          python generate_data.py day --date "$RUN_DATE" --output-dir "$GEN_DIR"
+
+      # --data-dir must point at the generated set; load.py defaults to the
+      # committed fixture (data/raw), which is NOT what this workflow builds on.
       - name: Land raw data
-        run: python load.py
+        run: python load.py --data-dir "$GEN_DIR" --db "$WAREHOUSE"
 
       - name: Check source freshness
         # Non-blocking signal: warns if a source has stopped receiving rows.
@@ -60,12 +81,14 @@ jobs:
       - name: Build + test
         run: dbt build
 
-      - name: Save warehouse
+      - name: Save state
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: telehealth.duckdb
-          key: warehouse-${{ github.run_id }}
+          path: |
+            data/generated
+            dashboards/sources/telehealth/telehealth.duckdb
+          key: pipeline-state-${{ github.run_id }}
 
       - name: Upload artifacts
         if: always()
@@ -75,13 +98,18 @@ jobs:
           path: target/
           retention-days: 7
 
-      # Error handling: ping Slack on failure. No-op unless SLACK_WEBHOOK_URL
-      # is set in repo secrets, so the workflow stays green for forks.
+      # Error handling: ping Slack on failure. The emptiness check lives in the
+      # shell, not the `if:` — step-level env isn't reliably visible to that
+      # step's own condition, so a secret-based guard there can silently skip.
       - name: Notify on failure
-        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        if: failure()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL not set — skipping notification."
+            exit 0
+          fi
           curl -sf -X POST -H 'Content-type: application/json' \
             --data "{\"text\":\":red_circle: Daily telehealth pipeline failed on ${{ github.ref_name }} (run ${{ github.run_id }})\"}" \
             "$SLACK_WEBHOOK_URL"
