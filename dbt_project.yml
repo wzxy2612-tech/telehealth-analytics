@@ -13,7 +13,7 @@ clean-targets: ["target", "dbt_packages"]
 
 vars:
   # Lower bound of the daily MRR date spine (fct_mrr_daily). Set to on/before
-  # your earliest subscription start. Upper bound is always current_date.
+  # your earliest subscription start. Upper bound is derived from source data.
   mrr_start_date: "2024-10-01"
 
 models:
@@ -25,7 +25,7 @@ models:
     # Intermediate: reusable business logic, not exposed to BI. Ephemeral keeps
     # the warehouse tidy (compiled inline, no objects created).
     intermediate:
-      +materialized: ephemeral
+      +materialized: view
       +schema: intermediate
     # Marts: what BI (Looker) reads. Persisted as tables for query performance.
     marts:
