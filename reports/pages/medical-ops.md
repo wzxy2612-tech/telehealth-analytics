@@ -53,7 +53,7 @@ order by no_show_rate desc
 <DataTable data={noshow_by_specialty} rows=all>
   <Column id=provider_specialty title="Specialty"/>
   <Column id=appointments fmt=num0/>
-  <Column id=no_show_rate title="No-show Rate" fmt=pct1 contentType=colorscale scaleColor=red/>
+  <Column id=no_show_rate title="No-show Rate" fmt=pct1 contentType=colorscale colorScale=negative/>
 </DataTable>
 
 ## Appointment mix by month

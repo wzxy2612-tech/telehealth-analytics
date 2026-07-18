@@ -78,7 +78,7 @@ order by signups desc
   <Column id=signups fmt=num0/>
   <Column id=subscribers fmt=num0/>
   <Column id=total_spend title="Spend" fmt=usd0/>
-  <Column id=cac_per_signup title="CAC/Signup" fmt=usd2 contentType=colorscale scaleColor=red/>
+  <Column id=cac_per_signup title="CAC/Signup" fmt=usd2 contentType=colorscale colorScale=negative/>
   <Column id=cac_per_subscriber title="CAC/Sub" fmt=usd2/>
   <Column id=active_mrr title="Active MRR" fmt=usd0/>
 </DataTable>
