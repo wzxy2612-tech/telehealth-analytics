@@ -8,7 +8,7 @@ with spine as (
     {{ dbt_utils.date_spine(
         datepart="day",
         start_date="cast('" ~ var('mrr_start_date') ~ "' as date)",
-        end_date="current_date"
+        end_date="(select max(started_at) + interval 1 day from " ~ ref('int_subscriptions_enriched') ~ ")"
     ) }}
 ),
 days as (
