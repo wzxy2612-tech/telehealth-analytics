@@ -153,23 +153,21 @@ Four pages, mapped to the same teams as the marts:
 | `business-ops` | Business Ops | MRR/ARR trend, plan mix, subscriber cohorts (retained vs. churned) |
 | `marketing` | Marketing | Signups + CAC by channel, cost-vs-conversion scatter, campaign detail |
 
-Run locally (needs Node 18+; build the warehouse first so the DuckDB file exists,
-then copy it next to the connection config):
+Run locally (needs Node 18+; build the warehouse first):
 
 ```bash
-make all          # build the warehouse (telehealth.duckdb)
-cp telehealth.duckdb dashboards/sources/telehealth/   # Evidence wants the db beside connection.yaml
+make all          # build warehouse at dashboards/sources/telehealth/telehealth.duckdb
 make dash         # install + run Evidence at localhost:3000
 ```
 
 **Live deploy.** `.github/workflows/deploy-dashboards.yml` runs the full pipeline
 and publishes to GitHub Pages on push to `main` (see Automation above).
 
-> Evidence moves fast. If versions/config drift, the robust path is to scaffold a
-> fresh project with the official template and drop in `dashboards/pages/` and
-> `dashboards/sources/` — those hold the actual dashboard logic. The base-path
-> handling (`BASE_PATH` + `EVIDENCE_BUILD_DIR`) in the deploy workflow is the
-> version-sensitive bit; check Evidence's GitHub Pages docs if assets 404.
+> Evidence moves fast. The deploy workflow uses `yq` to inject
+> `deployment.basePath` into `evidence.config.yaml` before building (env vars
+> like `BASE_PATH` are ignored in Evidence ≥v40). If assets 404 on deploy, check
+> whether Evidence's config schema has changed — that injection is the
+> version-sensitive bit.
 
 ---
 
