@@ -142,42 +142,44 @@ logs, and row/column controls in Looker.
 Requires Python 3.12+.
 
 ```bash
-make all          # setup -> load fixture -> build
-make docs         # browse the lineage graph + docs at localhost:8080
-```
-
-Or step by step (the fixture is committed, so there's nothing to generate):
-
-```bash
 pip install -r requirements.txt
 dbt deps
-python load.py          # loads the committed fixture from data/raw
-dbt build               # runs + tests every model
+python load.py                          # CSV → DuckDB raw schema
+dbt build                               # staging → intermediate → marts
+```
+
+Or with `make` (Unix/macOS):
+
+```bash
+make all          # same four steps in one command
+make docs         # browse the lineage graph + docs at localhost:8080
 ```
 
 Query the result:
 
 ```bash
-duckdb telehealth.duckdb "select calendar_date, active_subscriptions, mrr
-                          from marts.fct_mrr_daily order by calendar_date desc limit 7;"
+python -c "import duckdb; duckdb.connect('dashboards/sources/telehealth/telehealth.duckdb').sql(\"select calendar_date, active_subscriptions, mrr from marts.fct_mrr_daily order by calendar_date desc limit 7\").show()"
 ```
 
 ### Two data paths
 
-- **Fixture** (`data/raw/`, committed, deterministic): the default. `make load`,
+- **Fixture** (`data/raw/`, committed, deterministic): the default. `python load.py`,
   CI, and the Pages deploy all build from this so results are reproducible.
 - **Generated** (`data/generated/`, gitignored, large): for local scale testing.
-  `make generate-big` seeds it, `make load-big` builds from it.
+  `python generate_data.py backfill --start 2024-01-01 --end 2024-06-30 --output-dir data/generated`
+  seeds it, then `python load.py --data-dir data/generated` builds from it.
+  (`make generate-big` / `make load-big` on Unix.)
 
 ### Simulate the scheduled increment
 
 ```bash
-make generate-big        # seed data/generated first
-make day D=2025-01-02     # append one day to data/generated, reload, rebuild
+python generate_data.py backfill --start 2024-01-01 --end 2024-06-30 --output-dir data/generated
+python generate_data.py day 2025-01-02 data/generated
+python load.py --data-dir data/generated --db dashboards/sources/telehealth/telehealth.duckdb
+dbt build
 ```
 
-`make day` targets `data/generated` (never the committed fixture), so it won't
-create git churn.
+(`make generate-big && make day D=2025-01-02` on Unix.)
 
 ---
 
@@ -220,9 +222,13 @@ Four pages, mapped to the same teams as the marts:
 Run locally (needs Node 18+; build the warehouse first):
 
 ```bash
-make all          # build warehouse at dashboards/sources/telehealth/telehealth.duckdb
-make dash         # install + run Evidence at localhost:3000
+cd dashboards
+npm install
+npm run sources          # introspect DuckDB schema for Evidence
+npm run dev              # dev server at localhost:3000
 ```
+
+(`make dash` on Unix — same four commands bundled.)
 
 **Live deploy.** `.github/workflows/deploy-dashboards.yml` runs the full pipeline
 and publishes to GitHub Pages on push to `main` (see Automation above).

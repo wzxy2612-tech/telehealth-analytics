@@ -11,6 +11,9 @@ logs/
 # generated data (large synthetic sets, not committed)
 data/generated/
 
+# dlt pipeline state — locally managed in ~/.dlt
+.dlt/
+
 # python
 __pycache__/
 *.pyc

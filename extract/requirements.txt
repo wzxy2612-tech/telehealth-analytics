@@ -1,0 +1,8 @@
+# EL layer deps, kept separate from the root requirements.txt so the working
+# dbt/Evidence pipeline (and CI) is unaffected by dlt's dependency tree.
+#
+# Install:  pip install -r extract/requirements.txt
+#
+# After a successful install, pin what you actually got:
+#   pip freeze | grep -i "^dlt" >> extract/requirements.txt
+dlt[duckdb]>=1.5,<2.0
