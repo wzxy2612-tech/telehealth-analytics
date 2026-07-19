@@ -19,16 +19,24 @@ flowchart LR
       B[Chargebee<br/>subscriptions, events]
       C[Customer.io + Ads<br/>touchpoints]
     end
-    A & B & C -->|EL: Airbyte / dlt| R[(raw schema)]
+    A & B & C -->|EL| R[(raw schema)]
     R -->|dbt| S[staging<br/>cast · rename · PHI boundary]
     S --> I[intermediate<br/>business logic]
     I --> M[marts<br/>dims + facts]
     M --> BI[Evidence dashboards<br/>· Looker in prod]
 ```
 
-Locally the EL step is `load.py` landing CSVs into DuckDB; in production it's
-Airbyte/dlt landing into Redshift. Everything to the right of `raw` is identical.
-The Evidence layer (`dashboards/`) reads the same marts and builds a static site.
+Two EL paths — pick the one that fits your workflow:
+
+| Path | When to use | Mechanism |
+|---|---|---|
+| `python load.py` | CI, Pages deploy, first-time setup | Full-refresh CSVs → DuckDB |
+| `python extract/pipeline.py` | Local dev, daily increment, testing incremental | dlt (incremental merge/append, three sync strategies) |
+
+Both write into the same `dashboards/sources/telehealth/telehealth.duckdb` and
+leave `raw` in the same schema, so dbt doesn't care which one populated it.
+In production the same dlt pipeline lands into Redshift via a destination swap.
+Everything to the right of `raw` is identical regardless of the EL path.
 
 ---
 
@@ -246,7 +254,7 @@ and publishes to GitHub Pages on push to `main` (see Automation above).
 | Concern | Here (demo) | Production |
 |---|---|---|
 | Warehouse | DuckDB file | Redshift Serverless (uncomment `prod` in `profiles.yml`) |
-| EL | `load.py` on CSVs | Airbyte / dlt connectors → `raw` |
+| EL | `load.py` (fixture) or `extract/pipeline.py` (dlt) | dlt / Airbyte connectors → `raw` |
 | BI | Evidence (static site) | Looker (LookML on the marts); Evidence still fine for exec/embedded |
 | Orchestration | GitHub Actions cron | Same, or Dagster if DAG complexity grows |
 | Incrementality | one file, DuckDB | same models; add dist/sort keys on `fct_appointments` |
@@ -260,8 +268,12 @@ largest facts.
 ## Repo layout
 
 ```
+├── extract/                  # dlt EL layer (incremental, three sync strategies)
+│   ├── pipeline.py           #   dlt resources: replace / merge / append
+│   ├── source_db.py          #   build simulated source systems from CSVs
+│   └── README.md             #   sync-strategy design doc
 ├── generate_data.py          # synthetic data (stdlib only): backfill + daily append
-├── load.py                   # CSV -> DuckDB raw schema
+├── load.py                   # CSV -> DuckDB raw schema (deterministic, CI uses this)
 ├── dbt_project.yml           # layer configs, vars
 ├── profiles.yml              # duckdb dev/ci; commented redshift prod
 ├── packages.yml              # dbt_utils
