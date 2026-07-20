@@ -45,7 +45,7 @@ Everything to the right of `raw` is identical regardless of the EL path.
 | Layer | Materialization | Purpose |
 |---|---|---|
 | `staging` | view | 1:1 with sources; cast, rename, light cleaning. **PHI stops here.** |
-| `intermediate` | ephemeral | Reusable business logic (joins, attribution, tenure). |
+| `intermediate` | view | Reusable business logic (joins, attribution, tenure). |
 | `marts` | table | What BI reads. Dimensions + facts, one file per grain. |
 
 Each mart maps to a team's questions:
@@ -196,7 +196,7 @@ dbt build
 All CI paths build from the committed fixture — deterministic, hermetic, no
 secrets, no cache.
 
-- **`.github/workflows/ci.yml`** — on every PR: `dbt build --fail-fast` against
+- **`.github/workflows/ci.yml`** — on every PR: `dbt build --target ci --fail-fast` against
   the fixture. Guards against shipping a broken transform.
 - **`.github/workflows/deploy-dashboards.yml`** — on push to `main`: full
   pipeline (load fixture → dbt build → stage warehouse → evidence build) →
@@ -218,13 +218,14 @@ builds to a static site. Chosen over a GUI tool (Metabase/Looker) for the demo
 because the dashboards live in the repo as code and deploy free to GitHub Pages,
 so the project has a clickable front door without anyone running a server.
 
-Four pages, mapped to the same teams as the marts:
+Five pages, mapped to the same teams as the marts:
 
 | Page | For | Shows |
 |---|---|---|
 | `index` | Leadership | MRR / subscribers / patients / no-show KPIs, revenue trend, acquisition mix |
 | `medical-ops` | Medical Ops | Weekly volume + no-show trend, no-show by specialty, visit-type mix, provider load |
 | `business-ops` | Business Ops | MRR/ARR trend, plan mix, subscriber cohorts (retained vs. churned) |
+| `plan-history` | Business Ops | Plan mix over time, subscription plan changes (SCD2 reconstruction) |
 | `marketing` | Marketing | Signups + CAC by channel, cost-vs-conversion scatter, campaign detail |
 
 Run locally (needs Node 18+; build the warehouse first):
@@ -271,7 +272,8 @@ largest facts.
 ├── extract/                  # dlt EL layer (incremental, three sync strategies)
 │   ├── pipeline.py           #   dlt resources: replace / merge / append
 │   ├── source_db.py          #   build simulated source systems from CSVs
-│   └── README.md             #   sync-strategy design doc
+        │   ├── requirements.txt       #   dlt[duckdb]>=1.5
+        │   └── README.md             #   sync-strategy design doc
 ├── generate_data.py          # synthetic data (stdlib only): backfill + daily append
 ├── load.py                   # CSV -> DuckDB raw schema (deterministic, CI uses this)
 ├── dbt_project.yml           # layer configs, vars
@@ -279,15 +281,17 @@ largest facts.
 ├── packages.yml              # dbt_utils
 ├── Makefile                  # one-command ergonomics
 ├── data/raw/*.csv            # committed sample fixture (deterministic, seed=42)
+├── data/raw/README.md        # bilingual compliance notice (synthetic only)
 ├── data/generated/           # large synthetic sets (gitignored, local dev)
 ├── macros/
 │   └── generate_schema_name.sql
 └── models/
     ├── staging/              # stg_* + _sources.yml (freshness) + tests
-    ├── intermediate/         # int_appointments / subscriptions / attribution
+    ├── intermediate/         # int_appointments_enriched / subscriptions / attribution
     └── marts/
         ├── core/             # dim_patients, dim_providers, fct_appointments,
-        │                     #   fct_mrr_daily, fct_subscriptions
+        │                     #   fct_mrr_daily, fct_subscriptions,
+        │                     #   dim_subscription_history
         └── marketing/        # mart_marketing_attribution
 
 dashboards/                   # Evidence BI project (code-based, deploys to Pages)

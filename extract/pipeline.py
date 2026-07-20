@@ -150,7 +150,7 @@ def _needs_refresh() -> bool:
     dlt tracking columns. If so, the caller should use refresh='drop_sources' so
     dlt atomically drops both tables and pipeline state — avoiding the trap of
     dropping tables while leaving stale cursors in _dlt_pipeline_state."""
-    con = duckdb.connect(str(WAREHOUSE))
+    con = duckdb.connect(str(WAREHOUSE), read_only=True)
     try:
         tables = con.execute(
             "select table_name from information_schema.tables "
