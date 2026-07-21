@@ -18,12 +18,17 @@ flowchart LR
       A[App DB · MySQL/RDS<br/>patients, providers, appointments]
       B[Chargebee<br/>subscriptions, events]
       C[Customer.io + Ads<br/>touchpoints]
+      D[Synthea EHR<br/>encounters, patients, payer transitions]
     end
     A & B & C -->|EL| R[(raw schema)]
+    D -->|EL| R
     R -->|dbt| S[staging<br/>cast · rename · PHI boundary]
-    S --> I[intermediate<br/>business logic]
-    I --> M[marts<br/>dims + facts]
+    S -->|SaaS| I[intermediate<br/>business logic]
+    I --> M[marts · dims + facts]
     M --> BI[Evidence dashboards<br/>· Looker in prod]
+    S -->|EHR| EI[ehr_internal<br/>payer periods folded]
+    EI --> EM[ehr_marts<br/>clinical encounters]
+    EM --> BI
 ```
 
 Two EL paths — pick the one that fits your workflow:
@@ -42,16 +47,21 @@ Everything to the right of `raw` is identical regardless of the EL path.
 
 ## Modeling layers
 
-| Layer | Materialization | Purpose |
-|---|---|---|
-| `staging` | view | 1:1 with sources; cast, rename, light cleaning. **PHI stops here.** |
-| `intermediate` | view | Reusable business logic (joins, attribution, tenure). |
-| `marts` | table | What BI reads. Dimensions + facts, one file per grain. |
+| Layer | Materialization | Schema (SaaS) | Schema (EHR) | Purpose |
+|---|---|---|---|---|---|
+| `staging` | view | `staging` | `ehr_internal` | 1:1 with sources; cast, rename, light cleaning. **PHI stops here.** |
+| `intermediate` | view | `intermediate` | `ehr_internal` | Reusable business logic (joins, attribution, tenure). |
+| `marts` | table | `marts` | `ehr_marts` | What BI reads. Dimensions + facts, one file per grain. |
+
+EHR staging/intermediate live under a separate schema (`ehr_internal`) so the
+RBAC boundary can deny read access to the EHR processing layer while granting
+select on the serving layer (`ehr_marts`).
 
 Each mart maps to a team's questions:
 
 | Team | Mart | Answers |
 |---|---|---|
+| Clinical | `mart_clinical_encounters` (ehr_marts) | Encounter volume, cost by class, patient demographics |
 | Medical Ops | `fct_appointments` | No-show rate, appointment volume, provider load, lead times |
 | Business Ops | `fct_mrr_daily`, `fct_subscriptions` | MRR / ARR / ARPU over time, plan mix, cohorts, churn |
 | Marketing | `mart_marketing_attribution` | Signups + CAC by channel/campaign, active MRR by channel |
@@ -136,9 +146,9 @@ Telehealth data is PHI. Two deliberate choices:
        --seed 42 --output-dir data/raw
    ```
 2. **A PHI boundary at staging.** Direct identifiers (email, name, DOB) live
-   **only** in `stg_patients`. Marts expose `age_band` instead of DOB, an
-   `email_hash` join key instead of the address, and never carry names. See the
-   header comment in `models/staging/stg_patients.sql`.
+   **only** in `stg_patients`. Marts expose `age_band` instead of DOB and never
+   carry names or derivable keys. See the header comment in
+   `models/staging/stg_patients.sql`.
 
 In production this extends to: restricted schema grants on staging, no PII in
 logs, and row/column controls in Looker.
@@ -218,11 +228,12 @@ builds to a static site. Chosen over a GUI tool (Metabase/Looker) for the demo
 because the dashboards live in the repo as code and deploy free to GitHub Pages,
 so the project has a clickable front door without anyone running a server.
 
-Five pages, mapped to the same teams as the marts:
+Six pages, mapped to the same teams as the marts:
 
 | Page | For | Shows |
 |---|---|---|
 | `index` | Leadership | MRR / subscribers / patients / no-show KPIs, revenue trend, acquisition mix |
+| `clinical` | Clinical | Encounter volume, cost by class, patient demographics (EHR) |
 | `medical-ops` | Medical Ops | Weekly volume + no-show trend, no-show by specialty, visit-type mix, provider load |
 | `business-ops` | Business Ops | MRR/ARR trend, plan mix, subscriber cohorts (retained vs. churned) |
 | `plan-history` | Business Ops | Plan mix over time, subscription plan changes (SCD2 reconstruction) |
@@ -280,23 +291,45 @@ largest facts.
 ├── profiles.yml              # duckdb dev/ci; commented redshift prod
 ├── packages.yml              # dbt_utils
 ├── Makefile                  # one-command ergonomics
-├── data/raw/*.csv            # committed sample fixture (deterministic, seed=42)
-├── data/raw/README.md        # bilingual compliance notice (synthetic only)
+├── data/raw/                  # committed sample fixture (deterministic, seed=42)
+│   ├── *.csv                 #   SaaS domain CSVs
+│   ├── synthea/              #   Synthea EHR extract (encounters, patients, payers…)
+│   └── README.md             #   bilingual compliance notice (synthetic only)
 ├── data/generated/           # large synthetic sets (gitignored, local dev)
 ├── macros/
 │   └── generate_schema_name.sql
+├── seeds/
+│   └── phi_column_registry.csv  # single source of truth for PHI classification
+├── tests/                    # data-quality assertions (phi, k-anonymity, overlaps)
 └── models/
-    ├── staging/              # stg_* + _sources.yml (freshness) + tests
-    ├── intermediate/         # int_appointments_enriched / subscriptions / attribution
+    ├── staging/
+    │   ├── _sources.yml      # freshness monitors on raw tables
+    │   ├── _staging__models.yml
+    │   ├── stg_patients.sql / stg_appointments.sql / …  # SaaS domain
+    │   └── ehr/              # EHR staging (stg_ehr__encounters, stg_ehr__patients…)
+    │       ├── _ehr__sources.yml
+    │       ├── _ehr__models.yml
+    │       ├── stg_ehr__encounters.sql
+    │       ├── stg_ehr__patients.sql
+    │       └── stg_ehr__payer_transitions.sql
+    ├── intermediate/
+    │   ├── int_appointments_enriched.sql
+    │   ├── int_subscriptions_enriched.sql
+    │   ├── int_marketing_attribution.sql
+    │   └── ehr/              # EHR intermediate (payer periods folded)
+    │       └── int_ehr__payer_periods_folded.sql
     └── marts/
         ├── core/             # dim_patients, dim_providers, fct_appointments,
         │                     #   fct_mrr_daily, fct_subscriptions,
         │                     #   dim_subscription_history
-        └── marketing/        # mart_marketing_attribution
+        ├── marketing/        # mart_marketing_attribution
+        └── ehr/              # EHR mart (mart_clinical_encounters)
+            └── mart_clinical_encounters.sql
 
 dashboards/                   # Evidence BI project (code-based, deploys to Pages)
-├── pages/                    # index, medical-ops, business-ops, marketing (.md)
-├── sources/telehealth/       # DuckDB connection + pass-through queries on marts
+├── pages/                    # index, clinical, medical-ops, business-ops,
+│                             #   plan-history, marketing (.md)
+├── sources/telehealth/       # DuckDB connection + pass-through queries on marts/ehr_marts
 ├── evidence.config.yaml
 └── package.json
 ```
