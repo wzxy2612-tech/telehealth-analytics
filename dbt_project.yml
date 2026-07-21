@@ -15,6 +15,9 @@ vars:
   # Lower bound of the daily MRR date spine (fct_mrr_daily). Set to on/before
   # your earliest subscription start. Upper bound is derived from source data.
   mrr_start_date: "2024-10-01"
+  # --- 新增 EHR 专属变量 ---
+  ehr_as_of_date: "2026-06-30"  # 冻结的 Synthea max(stop) 日期，确保年龄计算幂等性
+  payer_gap_tolerance_days: 0   # Gaps-and-Islands 折叠算法的断档容忍度
 
 models:
   telehealth:
@@ -22,11 +25,21 @@ models:
     staging:
       +materialized: view
       +schema: staging
+      # --- 新增 EHR 命名空间路由与标签 ---
+      ehr:
+        +schema: ehr_internal         # 内部处理层：在生产环境中对业务端实施严格的 DENY 隔离
+        +tags: ["ehr"]                # 限制爆炸半径 (dbt run --select tag:ehr)
+        
     # Intermediate: reusable business logic, not exposed to BI. Ephemeral keeps
     # the warehouse tidy (compiled inline, no objects created).
     intermediate:
       +materialized: view
       +schema: intermediate
+      # --- 新增 EHR 命名空间路由与标签 ---
+      ehr:
+        +schema: ehr_internal         # 内部处理层：与 staging 保持同一权限域的访问隔离
+        +tags: ["ehr"]
+        
     # Marts: what BI (Looker) reads. Persisted as tables for query performance.
     marts:
       +materialized: table
@@ -35,3 +48,7 @@ models:
         +schema: marts
       marketing:
         +schema: marts
+      # --- 新增 EHR 命名空间路由与标签 ---
+      ehr:
+        +schema: ehr_marts            # 服务层 (Serving Layer)：支持直接通过 GRANT SELECT ON SCHEMA 赋权给 BI 工具
+        +tags: ["ehr"]

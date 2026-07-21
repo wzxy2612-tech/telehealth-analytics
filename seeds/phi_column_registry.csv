@@ -1,0 +1,19 @@
+column_name,tier,rationale
+ssn,1,direct identifier
+drivers,1,direct identifier
+passport,1,direct identifier
+prefix,1,direct identifier
+first,1,direct identifier
+middle,1,direct identifier
+last,1,direct identifier
+suffix,1,direct identifier
+maiden,1,direct identifier
+address,1,direct identifier
+lat,1,direct identifier
+lon,1,direct identifier
+birthplace,1,direct identifier
+owner_name,1,direct identifier
+phone,1,direct identifier
+fax,1,direct identifier
+birthdate,2,input to Safe Harbor generalisation
+zip,2,input to Safe Harbor generalisation

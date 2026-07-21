@@ -15,17 +15,20 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('stg_subscriptions')
-              field: subscription_id
+              arguments:
+                to: ref('stg_subscriptions')
+                field: subscription_id
       - name: patient_id
         data_tests:
           - relationships:
-              to: ref('dim_patients')
-              field: patient_id
+              arguments:
+                to: ref('dim_patients')
+                field: patient_id
       - name: plan_id
         data_tests:
           - accepted_values:
-              values: ["basic", "plus", "premium"]
+              arguments:
+                values: ["basic", "plus", "premium"]
       - name: valid_from
         data_tests: [not_null]
       - name: is_current
@@ -34,6 +37,7 @@ models:
     # composite grain: each plan period for a subscription starts exactly once
     data_tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - subscription_id
-            - valid_from
+          arguments:
+            combination_of_columns:
+              - subscription_id
+              - valid_from

@@ -81,6 +81,15 @@ jobs:
           yq -i '.deployment.basePath = "/${{ github.event.repository.name }}"' evidence.config.yaml
           cat evidence.config.yaml
 
+      - name: Check Evidence queries only read serving layer
+        working-directory: dashboards
+        run: |
+          if grep -rnIE '\b(raw|staging|intermediate)\.' sources/ pages/ ; then
+            echo "❌ ERROR: Architecture Violation!"
+            echo "Evidence queries may read the serving layer only (e.g., marts)."
+            exit 1
+          fi
+
       - name: Build sources + site
         working-directory: dashboards
         env:

@@ -1,0 +1,141 @@
+version: 2
+
+models:
+  - name: stg_ehr__patients
+    description: >
+      HIPAA Safe Harbor generalisation of Synthea patients. Dates are reduced
+      to year, ages are banded with a 90+ ceiling, and geography is limited to
+      state plus a 3-digit ZIP prefix suppressed to 000 for sparse areas.
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "length(zip3) = 3"
+    columns:
+      - name: patient_id
+        tests:
+          - unique
+          - not_null
+      - name: age_band
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['0-17', '18-34', '35-49', '50-64', '65-74', '75-89', '90+']
+      - name: zip3
+        description: >
+          Three characters. Anything longer means the suppression logic was
+          bypassed.
+      - name: lifetime_healthcare_expenses
+        description: Cumulative over the patient's whole life. Not additive.
+        meta:
+          additivity: non_additive
+          valid_grain: patient
+      - name: lifetime_healthcare_coverage
+        meta:
+          additivity: non_additive
+          valid_grain: patient
+      - name: annual_income
+        meta:
+          additivity: non_additive
+          valid_grain: patient
+
+  - name: stg_ehr__encounters
+    description: One row per completed clinical encounter.
+    columns:
+      - name: encounter_id
+        tests:
+          - unique
+          - not_null
+      - name: patient_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ehr__patients')
+                field: patient_id
+      - name: duration_minutes
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: encounter_class
+        tests:
+          - not_null
+
+  - name: stg_ehr__payer_transitions
+    description: >
+      Thin rename of the raw coverage rows. One row per patient per insurance
+      year, NOT per coverage period. Do not aggregate directly.
+    tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "not is_invalid_interval"
+          config:
+            severity: warn
+    columns:
+      - name: patient_id
+        tests:
+          - not_null
+      - name: valid_from
+        tests:
+          - not_null
+
+  - name: int_ehr__payer_periods_folded
+    description: >
+      True coverage periods after gaps-and-islands folding. One row per
+      continuous stretch with a single payer.
+    tests:
+      # If this fails, coverage periods overlap and the range join in
+      # mart_clinical_encounters will fan out. Treat a failure as a data
+      # finding, not as a broken test.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - patient_id
+              - valid_from
+    columns:
+      - name: payer_period_key
+        tests:
+          - unique
+          - not_null
+      - name: patient_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ehr__patients')
+                field: patient_id
+      - name: source_row_count
+        description: >
+          How many annual source rows collapsed into this period. The mean
+          across the table is the compression ratio and belongs in the writeup.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+      - name: coverage_days
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+              config:
+                where: "valid_to is not null"
+
+  - name: mart_clinical_encounters
+    description: >
+      Encounter-grain clinical fact table with de-identified patient
+      attributes and payer attributed from folded coverage periods.
+    columns:
+      - name: encounter_id
+        description: >
+          A uniqueness failure here means coverage periods overlap and the
+          range join fanned out. Fix upstream in the fold, not with a distinct.
+        tests:
+          - unique
+          - not_null
+      - name: patient_id
+        tests:
+          - not_null
+      - name: age_band
+        tests:
+          - not_null

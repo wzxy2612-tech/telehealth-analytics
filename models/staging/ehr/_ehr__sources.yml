@@ -1,0 +1,78 @@
+version: 2
+
+sources:
+  - name: ehr
+    description: >
+      Synthea-generated EHR extract, landed into the same `raw` schema as the
+      SaaS domain by load.py. Table names are prefixed `synthea_` to avoid
+      colliding with the SaaS generator's own `patients` table.
+
+      Tier-1 identifiers (SSN, DRIVERS, PASSPORT, name parts, ADDRESS, LAT,
+      LON, BIRTHPLACE, OWNER_NAME) are never landed -- see
+      load.py::SYNTHEA_DROP_COLUMNS. BIRTHDATE / DEATHDATE / ZIP are landed
+      because they are inputs to the Safe Harbor generalisation in staging;
+      they must not survive past staging. Both rules are enforced by
+      tests/assert_no_phi_columns.sql.
+
+      No source freshness is configured. This is a committed fixture, so a
+      freshness check would only ever measure the age of the git checkout.
+    schema: raw
+
+    tables:
+      - name: synthea_patients
+        description: One row per synthetic patient. Grain = patient.
+        columns:
+          - name: Id
+            description: Synthea patient UUID. Natural key for the EHR domain.
+            tests:
+              - unique
+              - not_null
+
+      - name: synthea_encounters
+        description: >
+          One row per completed clinical encounter. Grain = encounter.
+          There is no appointment lifecycle here: Synthea emits only visits
+          that happened, so no scheduled / cancelled / no-show state exists.
+          The booking funnel stays owned by the SaaS domain.
+        columns:
+          - name: Id
+            tests:
+              - unique
+              - not_null
+          - name: PATIENT
+            tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('ehr', 'synthea_patients')
+                    field: Id
+
+      - name: synthea_payer_transitions
+        description: >
+          NOT an SCD2 interval table, despite the START_DATE / END_DATE
+          columns. Synthea emits one row per patient per insurance *year*, so
+          a patient insured by the same payer for 58 years produces 58 rows.
+
+          On the 100-patient sample the worst case is 59 rows across 4 payers,
+          and at least one patient has 58 rows and a single payer -- i.e. zero
+          actual switches. Answering "how many times did this patient change
+          insurer?" with count(*) - 1 over-reports by more than an order of
+          magnitude. Collapsed in int_ehr__payer_periods_folded.
+        columns:
+          - name: PATIENT
+            tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('ehr', 'synthea_patients')
+                    field: Id
+
+      # Landed but not yet modelled. Column headers differ across Synthea
+      # releases, so verify with `DESCRIBE SELECT * FROM raw.synthea_payers`
+      # before writing staging models against these.
+      - name: synthea_payers
+        description: Reference table for payer names. Not yet modelled.
+      - name: synthea_providers
+        description: Reference table for individual clinicians. Not yet modelled.
+      - name: synthea_organizations
+        description: Reference table for facilities. Not yet modelled.

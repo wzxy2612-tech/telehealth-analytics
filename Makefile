@@ -47,10 +47,14 @@ docs:
 	dbt docs serve --port 8080
 
 # ---- Evidence dashboards (require Node 18+) ----
+lint-evidence:
+	@echo "Checking Evidence queries only read serving layer..."
+	@if grep -rnIE '\b(raw|staging|intermediate)\.' dashboards/sources/ dashboards/pages/ ; then echo "❌ ERROR: Architecture Violation!"; echo "Evidence queries may read the serving layer only (e.g., marts)."; exit 1; fi
+
 dash:
 	cd dashboards && npm install && npm run sources && npm run dev
 
-dash-build:
+dash-build: lint-evidence
 	cd dashboards && npm install && npm run sources && npm run build
 
 # Build from the committed fixture (data/raw). No regeneration: the fixture is

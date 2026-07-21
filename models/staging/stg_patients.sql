@@ -15,7 +15,6 @@ renamed as (
 
         -- ---- PII/PHI: do not propagate past staging -----------------------
         lower(email)                                as email,
-        {{ dbt_utils.generate_surrogate_key(['lower(email)']) }} as email_hash,
         first_name,
         last_name,
         cast(date_of_birth as date)                 as date_of_birth,

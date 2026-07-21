@@ -12,7 +12,8 @@ models:
       - name: age_band
         data_tests:
           - accepted_values:
-              values: ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
+              arguments:
+                values: ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
 
   - name: dim_providers
     columns:
@@ -28,12 +29,14 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('dim_patients')
-              field: patient_id
+              arguments:
+                to: ref('dim_patients')
+                field: patient_id
       - name: status
         data_tests:
           - accepted_values:
-              values: ["completed", "no_show", "cancelled", "scheduled"]
+              arguments:
+                values: ["completed", "no_show", "cancelled", "scheduled"]
 
   - name: fct_mrr_daily
     description: "Business Ops. One row per calendar day: active subs, MRR, ARR, ARPU."
@@ -51,16 +54,19 @@ models:
       - name: patient_id
         data_tests:
           - relationships:
-              to: ref('dim_patients')
-              field: patient_id
+              arguments:
+                to: ref('dim_patients')
+                field: patient_id
       - name: plan_id
         data_tests:
           - accepted_values:
-              values: ["basic", "plus", "premium"]
+              arguments:
+                values: ["basic", "plus", "premium"]
       - name: status
         data_tests:
           - accepted_values:
-              values: ["active", "cancelled", "paused"]
+              arguments:
+                values: ["active", "cancelled", "paused"]
 
   # ---- Marketing -----------------------------------------------------------
   - name: mart_marketing_attribution

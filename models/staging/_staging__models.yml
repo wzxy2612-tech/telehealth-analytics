@@ -21,16 +21,19 @@ models:
       - name: status
         data_tests:
           - accepted_values:
-              values: ["completed", "no_show", "cancelled", "scheduled"]
+              arguments:
+                values: ["completed", "no_show", "cancelled", "scheduled"]
       - name: appointment_type
         data_tests:
           - accepted_values:
-              values: ["video", "phone", "message"]
+              arguments:
+                values: ["video", "phone", "message"]
       - name: patient_id
         data_tests:
           - relationships:
-              to: ref('stg_patients')
-              field: patient_id
+              arguments:
+                to: ref('stg_patients')
+                field: patient_id
 
   - name: stg_subscriptions
     description: "Current-state snapshot per subscription."
@@ -40,7 +43,8 @@ models:
       - name: status
         data_tests:
           - accepted_values:
-              values: ["active", "cancelled", "paused"]
+              arguments:
+                values: ["active", "cancelled", "paused"]
       - name: mrr_amount
         data_tests: [not_null]
 
@@ -51,7 +55,8 @@ models:
       - name: event_type
         data_tests:
           - accepted_values:
-              values: ["created", "activated", "plan_changed", "cancelled", "reactivated"]
+              arguments:
+                values: ["created", "activated", "plan_changed", "cancelled", "reactivated"]
 
   - name: stg_marketing_touchpoints
     columns:

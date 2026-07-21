@@ -42,8 +42,9 @@ sources:
             data_tests:
               - not_null
               - relationships:
-                  to: source('raw', 'patients')
-                  field: patient_id
+                  arguments:
+                    to: source('raw', 'patients')
+                    field: patient_id
 
       - name: subscriptions
         description: "Chargebee. Current-state snapshot of each subscription."
@@ -54,8 +55,9 @@ sources:
           - name: patient_id
             data_tests:
               - relationships:
-                  to: source('raw', 'patients')
-                  field: patient_id
+                  arguments:
+                    to: source('raw', 'patients')
+                    field: patient_id
 
       - name: subscription_events
         description: "Chargebee. Immutable lifecycle log (created / plan_changed / cancelled)."
