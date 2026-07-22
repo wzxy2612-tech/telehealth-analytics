@@ -154,7 +154,7 @@ def _needs_refresh() -> bool:
     try:
         tables = con.execute(
             "select table_name from information_schema.tables "
-            "where table_schema = 'raw'"
+            "where table_schema = 'raw' and table_name not like 'synthea_%'"
         ).fetchall()
         for (t,) in tables:
             if t.startswith("_dlt"):

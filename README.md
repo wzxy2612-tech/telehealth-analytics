@@ -43,6 +43,21 @@ leave `raw` in the same schema, so dbt doesn't care which one populated it.
 In production the same dlt pipeline lands into Redshift via a destination swap.
 Everything to the right of `raw` is identical regardless of the EL path.
 
+### Dual-track ingestion: SaaS CDC vs. Clinical file-drop
+
+The two data domains arrive through different ingestion tracks — a deliberate
+design choice that mirrors a common production pattern:
+
+| Domain | Path | Mechanism | Why |
+|---|---|---|---|
+| SaaS (appointments, subscriptions…) | `extract/pipeline.py` | dlt incremental (merge + append) | Sources are stateful databases: rows mutate. CDC via cursor is 99% cheaper than daily full refresh. |
+| Clinical (Synthea encounters, payer transitions…) | `load.py` | Bulk CSV overwrite (`not like 'synthea_%'`) | EHR data lands as file dumps (S3/FTP). No CDC cursor, no row mutation — batch replace is the right primitive. |
+
+`load.py` writes `synthea_*` tables with `CREATE OR REPLACE TABLE` (no
+`_dlt_id`). `_needs_refresh()` in `pipeline.py` explicitly excludes `synthea_%`
+tables so they never trigger a spurious `drop_sources` — keeping SaaS
+incrementals truly incremental.
+
 ---
 
 ## Modeling layers
